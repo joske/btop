@@ -1103,10 +1103,18 @@ namespace Net {
 					catch (const std::out_of_range&) {}
 
 					//? Update speed, total and top values
+					if (val < saved_stat.last) {
+						saved_stat.rollover += saved_stat.last;
+						saved_stat.last = 0;
+					}
+					if (cmp_greater((unsigned long long)saved_stat.rollover + (unsigned long long)val, numeric_limits<uint64_t>::max())) {
+						saved_stat.rollover = 0;
+						saved_stat.last = 0;
+					}
 					saved_stat.speed = round((double)(val - saved_stat.last) / ((double)(new_timestamp - timestamp) / 1000));
 					if (saved_stat.speed > saved_stat.top) saved_stat.top = saved_stat.speed;
-					if (saved_stat.offset > val) saved_stat.offset = 0;
-					saved_stat.total = val - saved_stat.offset;
+					if (saved_stat.offset > val + saved_stat.rollover) saved_stat.offset = 0;
+					saved_stat.total = (val + saved_stat.rollover) - saved_stat.offset;
 					saved_stat.last = val;
 
 					//? Add values to graph
@@ -1631,17 +1639,29 @@ namespace Proc {
 
 		//* Sort processes
 		if (sorted_change or not no_update) {
-			switch (v_index(sort_vector, sorting)) {
-					case 0: rng::sort(current_procs, rng::greater{}, &proc_info::pid); 		break;
-					case 1: rng::sort(current_procs, rng::greater{}, &proc_info::name);		break;
-					case 2: rng::sort(current_procs, rng::greater{}, &proc_info::cmd); 		break;
-					case 3: rng::sort(current_procs, rng::greater{}, &proc_info::threads); 	break;
-					case 4: rng::sort(current_procs, rng::greater{}, &proc_info::user); 	break;
-					case 5: rng::sort(current_procs, rng::greater{}, &proc_info::mem); 		break;
-					case 6: rng::sort(current_procs, rng::greater{}, &proc_info::cpu_p);   	break;
-					case 7: rng::sort(current_procs, rng::greater{}, &proc_info::cpu_c);   	break;
+			if (reverse) {
+				switch (v_index(sort_vector, sorting)) {
+					case 0: rng::stable_sort(current_procs, rng::less{}, &proc_info::pid); 		break;
+					case 1: rng::stable_sort(current_procs, rng::less{}, &proc_info::name);		break;
+					case 2: rng::stable_sort(current_procs, rng::less{}, &proc_info::cmd); 		break;
+					case 3: rng::stable_sort(current_procs, rng::less{}, &proc_info::threads); 	break;
+					case 4: rng::stable_sort(current_procs, rng::less{}, &proc_info::user); 	break;
+					case 5: rng::stable_sort(current_procs, rng::less{}, &proc_info::mem); 		break;
+					case 6: rng::stable_sort(current_procs, rng::less{}, &proc_info::cpu_p);   	break;
+					case 7: rng::stable_sort(current_procs, rng::less{}, &proc_info::cpu_c);   	break;
+				}
+			} else {
+				switch (v_index(sort_vector, sorting)) {
+						case 0: rng::stable_sort(current_procs, rng::greater{}, &proc_info::pid); 		break;
+						case 1: rng::stable_sort(current_procs, rng::greater{}, &proc_info::name);		break;
+						case 2: rng::stable_sort(current_procs, rng::greater{}, &proc_info::cmd); 		break;
+						case 3: rng::stable_sort(current_procs, rng::greater{}, &proc_info::threads); 	break;
+						case 4: rng::stable_sort(current_procs, rng::greater{}, &proc_info::user); 	break;
+						case 5: rng::stable_sort(current_procs, rng::greater{}, &proc_info::mem); 		break;
+						case 6: rng::stable_sort(current_procs, rng::greater{}, &proc_info::cpu_p);   	break;
+						case 7: rng::stable_sort(current_procs, rng::greater{}, &proc_info::cpu_c);   	break;
+				}
 			}
-			if (reverse) rng::reverse(current_procs);
 
 			//* When sorting with "cpu lazy" push processes over threshold cpu usage to the front regardless of cumulative usage
 			if (not tree and not reverse and sorting == "cpu lazy") {
@@ -1714,9 +1734,7 @@ namespace Proc {
 			}
 
 			//? Final sort based on tree index
-			rng::sort(current_procs, rng::less{}, &proc_info::tree_index);
-			if (reverse) rng::reverse(current_procs);
-
+			rng::stable_sort(current_procs, rng::less{}, &proc_info::tree_index);
 		}
 
 		numpids = (int)current_procs.size() - filter_found;
